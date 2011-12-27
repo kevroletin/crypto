@@ -74,7 +74,7 @@ sub from_dec {
     my ($dec) = @_;
     my @res;
     while ($dec) {
-        push @res, $dec % 2;
+        unshift @res, $dec % 2;
         $dec = int ($dec / 2);
     }
     unshift @res, 0 while @res < 4;
@@ -247,16 +247,13 @@ my $ex_perm = Permutation->new(length => 32, table => [qw(
 28 29 30 31 32 1
 )]);
 
-my $p_perm = Permutation->new(table => [qw(
-16 7 20 21
-29 12 28 17
-1 15 23 26
-5 18 31 10
-2 8 24 14
-32 27 3 9
-19 13 30 6
-22 11 4 25
-)]);
+my $p_perm = Permutation->new(length => 32, table => [
+16, 7, 20, 21, 29, 12, 28, 17,
+1, 15, 23, 26, 5, 18, 31, 10,
+2, 8, 24, 14, 32, 27, 3, 9,
+19, 13, 30, 6, 22, 11, 4, 25
+]);
+
 
 my $pc_1_perm;
 my $pc_2_perm;
@@ -329,50 +326,6 @@ my @s =
 2 ,1 ,14 ,7 ,4 ,10 ,8 ,13 ,15 ,12 ,9 ,0 ,3 ,5 ,6 ,11 ]);
 
 
-
-#sub _reduced_key {
-#    my ($self) = @_;
-#    my @res;
-#    my $i = 0;
-#    for (@{$self->key()}) {
-#        next unless ++$i % 8;
-#        push @res, $_
-#    }
-#    \@res;
-#}
-
-
-sub _select_s {
-    my ($self, $s_num, $bit_arr) = @_;
-    die "should be 6-bit" unless @$bit_arr == 6;
-    my $b = [@{$bit_arr}];
-    my $t = shift $b;
-    my $p = pop $b;
-    unshift $b, $p;
-    unshift $b, $t;
-
-    my $n = BitsArray::to_dec($b);
-    BitsArray::from_dec( $s[$s_num][$n] )
-}
-
-sub _f {
-    my ($self, $round_key, $data) = @_;
-    my $ex_d = $ex_perm->execute($data);
-#    print "ex_data:", BitsArray::to_hex($ex_d), "\n";
-#    BitsArray::pretty_print($ex_d, 6);
-    my $t_res = BitsArray::map_xor($ex_d, $round_key);
-
-    my $s_block_data = BitsArray::split_6($t_res);
-    my @s_block_res;
-    for my $s_block_num (0 .. 7) {
-        my $t = $self->_select_s($s_block_num,
-                                 $s_block_data->[$s_block_num]);
-        push @s_block_res, $t;
-    }
-
-    $p_perm->execute(BitsArray::join_arrays(@s_block_res));
-}
-
 my $trace = {
 cd => [
 [split //, qw(11110000110011001010101000001010101011001100111100000000)],
@@ -412,6 +365,60 @@ key => [
 [ split //, qw(110010100011110100000011101110000111000000110010)] ]
 };
 
+
+#sub _reduced_key {
+#    my ($self) = @_;
+#    my @res;
+#    my $i = 0;
+#    for (@{$self->key()}) {
+#        next unless ++$i % 8;
+#        push @res, $_
+#    }
+#    \@res;
+#}
+
+
+sub _select_s {
+    my ($self, $s_num, $bit_arr) = @_;
+    die "should be 6-bit" unless @$bit_arr == 6;
+    my $b = [@{$bit_arr}];
+    my $t = shift $b;
+    my $p = pop $b;
+    unshift $b, $p;
+    unshift $b, $t;
+
+    my $n = BitsArray::to_dec($b);
+    my $res =  BitsArray::from_dec( $s[$s_num][$n] );
+#    print "s-block $s_num:\n";
+#    print "               from " . (join '', @$bit_arr);
+#    print "\n               to   " . (join '', @$res);
+#    print "\n";
+
+    $res;
+}
+
+sub _f {
+    my ($self, $round_key, $data) = @_;
+    my $ex_d = $ex_perm->execute($data);
+    print "ex_data:", BitsArray::to_hex($ex_d), "\n";
+    BitsArray::pretty_print($ex_d, 6);
+    my $t_res = BitsArray::map_xor($ex_d, $round_key);
+
+#    print "xor:\n";
+#    BitsArray::pretty_print($t_res, 6);
+
+    my $s_block_data = BitsArray::split_6($t_res);
+    my @s_block_res;
+    for my $s_block_num (0 .. 7) {
+        my $t = $self->_select_s($s_block_num,
+                                 $s_block_data->[$s_block_num]);
+        push @s_block_res, $t;
+    }
+
+#    BitsArray::pretty_print(BitsArray::join_arrays(@s_block_res), 4);
+    $p_perm->execute(BitsArray::join_arrays(@s_block_res));
+}
+
 sub process_block {
     my ($self, $data) = @_;
     die "bad block length" unless @$data == 64;
@@ -430,6 +437,12 @@ sub process_block {
     my ($c, $d) = BitsArray::split_28($ext_key);
     for my $round (1 .. 16) {
         print "===Round $round===\n";
+
+        print "A_i:\n";
+        BitsArray::pretty_print($a_0, 7);
+        print "B_i:\n";
+        BitsArray::pretty_print($b_0, 7);
+
 #        print "before shift:\n";
 #        BitsArray::pretty_print(BitsArray::join_arrays($c, $d));
         for (($round ~~ [1, 2, 9, 16]) ? 1 : (1, 2)) {
@@ -455,7 +468,11 @@ sub process_block {
         }
 
         my $f_res = $self->_f($subkey, $b_0);
-        ($a_0 , $b_0) = ($f_res, $a_0);
+
+        print "p:\n";
+        BitsArray::pretty_print($f_res);
+        ($a_0 , $b_0) = ($b_0,
+                         BitsArray::map_xor($f_res, $a_0));
     }
     ($a_0 , $b_0) = ($b_0, $a_0);
     my $res = BitsArray::join_arrays($a_0, $b_0);
@@ -468,12 +485,19 @@ sub process_block {
 use Data::Dumper::Concise;
 
 #my $key = [map { $_ > 31 ? 1 : 0 } 0 .. 63];
-my $key = BitsArray::from_hex(lc('0123456789ABCDEF'));
+#my $key = BitsArray::from_hex(lc('0123456789ABCDEF'));
 #my $key = BitsArray::from_hex(lc('5b5a57676a56676e'));
 my $encoder = Des->new(key => $key);
 #my $data = [map { $_ > 31 ? 1 : 0 } 0 .. 63];
-my $data = BitsArray::from_hex(lc('4E6F772069732074'));
+#my $data = BitsArray::from_hex(lc('4E6F772069732074'));
 #my $data = BitsArray::from_hex(lc('675a69675e5a6b5a'));
+
+print Dumper( Des::_select_s(undef, 1, [split //, '110001']));
+#               from 110001
+#               to   1101
+
+
+#exit;
 
 my $res = $encoder->process_block($data);
 #print Dumper $res;
@@ -481,6 +505,8 @@ my $res = $encoder->process_block($data);
 #key: print '00000001 00100011 01000101 01100111 10001001 10101011 11001101 11101111';
 
 print BitsArray::to_hex($res);
+
+#print Des::_select_s(undef, 
 
 exit();
 

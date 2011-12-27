@@ -1,7 +1,227 @@
-use Carp;
-$SIG{__DIE__} = sub { Carp::confess @_ };
+\documentclass[10pt,a4paper]{article}
+\usepackage[utf8x]{inputenc}
+\usepackage{ucs}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{amssymb}
+\usepackage[russian]{babel}
+\usepackage{listings}
+\author{Кевролетин В.В.}
+\title{DES}
+\begin{document}
+
+\maketitle
+
+\subsection*{Задание5.1}
+\subsubsection*{Условие}
+Продемонстрировать лавинный эффект в DES: написать программу
+(Mathematica, Scheme, Sage), которая вычисляет расстояние Хемминга для
+изменений в тексте и в ключе. Сгенерировать сообщение и ключ, а затем,
+последовательно изменяя в сообщении по одному биту, рассчитать
+расстояние Хемминга с исходным при неизменном ключе. Вычислить также
+среднее расстояние по всем вариантам. Аналогичные действия проделать
+для фиксированного сообщения, изменяя ключ. Программу предварительно
+протестировать
+\subsubsection*{Решение}
+
+Реализация шифратора/дешифратора находится в самом конце документа. \\
+Ниже проверка алгоритма на тесте со страницы курса 
+(http://people.csail.mit.edu/rivest/Destest.txt) :
+\begin{lstlisting}
+my $x_0 = BitsArray::from_hex(lc('9474B8E8C73BCA7D'));
+for my $i (0 .. 15) {
+    my $encoder = Des->new(key => $x_0);
+    unless ($i % 2) {
+        $x_0 = $encoder->encode_block($x_0);
+    } else {
+        $x_0 = $encoder->decode_block($x_0);
+    }
+}
+print BitsArray::to_hex($x_0); # 1B1A2DDB4C642438 == 1b1a2ddb4c642438
+\end{lstlisting}
+
+Ниже демонстрация лавинного эффекта DES. Ключ и данные генерируются
+случайным образом, количество 0 и 1 примерно равно. На каждом
+шаге инфертируется i-й бит данных(ключа), данные кодируются с
+использованием ключа и подсчитывается
+расстояние Хемминга для открытого текста и шифротекста. Ниже
+подводится среднее.
+
+\begin{lstlisting}
+===changing data test===
+0: 29
+1: 25
+2: 37
+3: 37
+4: 34
+5: 31
+6: 31
+7: 34
+8: 28
+9: 33
+10: 29
+11: 28
+12: 33
+13: 33
+14: 30
+15: 39
+16: 39
+17: 26
+18: 25
+19: 26
+20: 29
+21: 35
+22: 37
+23: 34
+24: 38
+25: 32
+26: 34
+27: 30
+28: 30
+29: 34
+30: 36
+31: 26
+32: 33
+33: 33
+34: 39
+35: 32
+36: 29
+37: 39
+38: 30
+39: 33
+40: 31
+41: 26
+42: 34
+43: 34
+44: 30
+45: 29
+46: 36
+47: 29
+48: 31
+49: 37
+50: 29
+51: 30
+52: 34
+53: 30
+54: 29
+55: 34
+56: 41
+57: 31
+58: 30
+59: 38
+60: 31
+61: 28
+62: 28
+63: 38
+64: 30
+average: 32.123077
+===changing key test===
+0: 34
+1: 37
+2: 34
+3: 38
+4: 29
+5: 36
+6: 34
+7: 26
+8: 26
+9: 25
+10: 30
+11: 26
+12: 30
+13: 31
+14: 42
+15: 33
+16: 33
+17: 32
+18: 37
+19: 35
+20: 31
+21: 29
+22: 33
+23: 34
+24: 34
+25: 24
+26: 32
+27: 26
+28: 32
+29: 27
+30: 31
+31: 29
+32: 29
+33: 38
+34: 32
+35: 35
+36: 26
+37: 34
+38: 34
+39: 29
+40: 29
+41: 37
+42: 34
+43: 34
+44: 29
+45: 30
+46: 36
+47: 20
+48: 20
+49: 31
+50: 28
+51: 35
+52: 35
+53: 32
+54: 37
+55: 30
+56: 30
+57: 28
+58: 37
+59: 43
+60: 30
+61: 29
+62: 37
+63: 37
+64: 37
+average: 31.876923
+\end{lstlisting}
+
+Ниже приведён код для демонстрации лавинного эффенкта(результаты выше)
+\begin{lstlisting}
+my $encoder = Des->new(key => $key);
+my @res;
+for my $i (0 .. 64) {
+    my $res = $encoder->encode_block($data);
+    my $dist = BitsArray::hamming_dist($data, $res);
+    printf "%d: %d\n", $i, $dist;
+    push @res, $dist;
+
+    $data->[$i] = $data->[$i] ? 0 : 1;
+}
+
+printf "average: %f\n", ( sum(@res) / @res );
 
 
+print "===changing key test===\n";
+$key = $rand_64->();
+$data = $rand_64->();;
+
+@res = ();
+for my $i (0 .. 64) {
+    $encoder = Des->new(key => $key);
+    my $res = $encoder->encode_block($data);
+    my $dist = BitsArray::hamming_dist($data, $res);
+    printf "%d: %d\n", $i, $dist;
+    push @res, $dist;
+
+    $key->[$i] = $key->[$i] ? 0 : 1;
+}
+
+printf "average: %f", ( sum(@res) / @res );
+\end{lstlisting}
+
+\subsubsection*{Реализация}
+Ниже приведеня реализация алгоритма DES.
+Язык реализации: Перл
+\begin{lstlisting}
 package BitsArray;
 use warnings;
 use strict;
@@ -84,7 +304,7 @@ sub from_dec {
 }
 
 sub from_hex {
-    my ($hex) = lc($_[0]);
+    my ($hex) = @_;
     my @res;
     my $h = { 0 => [qw(0 0 0 0)],
               1 => [qw(0 0 0 1)],
@@ -103,7 +323,6 @@ sub from_hex {
               e => [qw(1 1 1 0)],
               f => [qw(1 1 1 1)] };
     for (split //, $hex) {
-        die "bad hex digit: $_\n" unless $h->{$_};
         push @res, $_ for @{$h->{$_}}
     }
     \@res
@@ -323,7 +542,7 @@ my @s =
 7 ,11 ,4 ,1 ,9 ,12 ,14 ,2 ,0 ,6 ,10 ,13 ,15 ,3 ,5 ,8 ,
 2 ,1 ,14 ,7 ,4 ,10 ,8 ,13 ,15 ,12 ,9 ,0 ,3 ,5 ,6 ,11 ]);
 
-has 'key' => ( isa => 'Key|Str',
+has 'key' => ( isa => 'Key',
                is => 'ro',
                required => 1 );
 
@@ -333,10 +552,6 @@ has 'round_keys' => ( isa => 'ArrayRef',
 
 sub BUILD {
     my ($self) = @_;
-    unless (ref($self->{key})) {
-        $self->{key} = BitsArray::from_hex($self->{key});
-    }
-
     my @keys;
     my $ext_key = $pc_1_perm->execute($self->key());
     my ($c, $d) = BitsArray::split_28($ext_key);
@@ -413,193 +628,8 @@ sub decode_block {
     $self->_process_block($data, 0);
 }
 
-sub _process_blocks_stream {
-    my ($self, $blocks, $encode) = @_;
-    my @res;
-    my $funct = $encode ? \&encode_block : \&decode_block;
-    for (@$blocks) {
-        push @res, $funct->($self, $_);
-    }
-    \@res
-}
-
-sub _process_hex_str {
-    my ($self, $str, $encode) = @_;
-    die "length is not multiple 16" if length($str) % 16;
-    my @blocks;
-    for (0 .. (int length($str)/16)  - 1) {
-        my $subs = substr($str, $_*16, 16);
-        push @blocks, BitsArray::from_hex($subs);
-    }
-    $self->_process_blocks_stream(\@blocks, $encode)
-}
-
-sub encode_hex_str {
-    my ($self, $str) = @_;
-    my $res = $self->_process_hex_str($str, 1);
-    join '', map { BitsArray::to_hex($_) } @$res
-}
-
-sub decode_hex_str {
-    my ($self, $str) = @_;
-    my $res = $self->_process_hex_str($str, 0);
-    join '', map { BitsArray::to_hex($_) } @$res
-}
-
 1;
 
-package Des::CBC;
-use Moose;
+\end{lstlisting}
 
-extends 'Des';
-
-sub _process_blocks_stream {
-    my ($self, $blocks, $encode) = @_;
-    my @res;
-    my $a;
-    if ($encode) {
-        for (@$blocks) {
-            my $b = $self->encode_block($_);
-            push @res, ($a ? BitsArray::map_xor($a, $b) : $b);
-            $a = $_;
-        }
-    } else {
-        for (@$blocks) {
-            $_ = BitsArray::map_xor($_, $a) if $a;
-            $a = $self->decode_block($_);
-            push @res, $a;
-        }
-    }
-    \@res
-}
-
-1;
-
-package Des::OFB;
-use Moose;
-
-extends 'Des';
-
-has 'init_vector' => ( isa => 'Key|Str',
-                       is => 'ro',
-                       required => 1 );
-
-before 'BUILD' => sub {
-    my ($self) = @_;
-    unless (ref($self->{init_vector})) {
-        $self->{init_vector} =
-            BitsArray::from_hex($self->{init_vector});
-    }
-};
-
-
-sub _process_blocks_stream {
-    my ($self, $blocks, $encode) = @_;
-    my @res;
-    my $z = $self->encode_block($self->init_vector());
-    for (@$blocks) {
-        push @res, BitsArray::map_xor($_, $z);
-        $z = $self->encode_block($z);
-    }
-    \@res
-}
-
-
-1;
-
-use Data::Dumper::Concise;
-
-#my $encoder = Des->new(key => '9474B8E8C73BCA7D');
-my $encoder = Des::OFB->new(key => '9474B8E8C73BCA7D',
-                            init_vector => '9474B8E8C73BCA7D');
-
-my $pretty_print = sub {
-    my ($str) = @_;
-    die "length is not multiple 16" if length($str) % 16;
-    for (0 .. (int length($str)/16)  - 1) {
-        my $subs = substr($str, $_*16, 16);
-        print $subs, " ";
-    }
-    print "\n";
-};
-
-my $open = 'abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd';
-my $cipher = $encoder->encode_hex_str($open);
-$pretty_print->($cipher);
-my $res = $encoder->decode_hex_str($cipher);
-$pretty_print->($res);
-
-
-use List::Util 'sum';
-
-
-exit;
-
-my $x_0 = BitsArray::from_hex(lc('9474B8E8C73BCA7D'));
-for my $i (0 .. 15) {
-    my $encoder = Des->new(key => $x_0);
-    unless ($i % 2) {
-        $x_0 = $encoder->encode_block($x_0);
-    } else {
-        $x_0 = $encoder->decode_block($x_0);
-    }
-}
-print BitsArray::to_hex($x_0); # 1B1A2DDB4C642438 == 1b1a2ddb4c642438
-
-=begin
-
-my $rand_64 = sub  { [ map { rand() > 0.5 ? 0 : 1 } 1 .. 64 ] };
-
-my $key = $rand_64->();
-my $data = $rand_64->();;
-
-print "===changing data test===\n";
-
-my $encoder = Des->new(key => $key);
-my @res;
-for my $i (0 .. 64) {
-    my $res = $encoder->process_block($data);
-    my $dist = BitsArray::hamming_dist($data, $res);
-    printf "%d: %d\n", $i, $dist;
-    push @res, $dist;
-
-    $data->[$i] = $data->[$i] ? 0 : 1;
-}
-
-printf "average: %f\n", ( sum(@res) / @res );
-
-
-print "===changing key test===\n";
-$key = $rand_64->();
-$data = $rand_64->();;
-
-@res = ();
-for my $i (0 .. 64) {
-    $encoder = Des->new(key => $key);
-    my $res = $encoder->process_block($data);
-    my $dist = BitsArray::hamming_dist($data, $res);
-    printf "%d: %d\n", $i, $dist;
-    push @res, $dist;
-
-    $key->[$i] = $key->[$i] ? 0 : 1;
-}
-
-printf "average: %f", ( sum(@res) / @res );
-
-=cut
-
-#my $key = [map { $_ > 31 ? 1 : 0 } 0 .. 63];
-#my $key = BitsArray::from_hex(lc('0123456789ABCDEF'));
-#my $encoder = Des->new(key => $key);
-#my $data = [map { $_ > 31 ? 1 : 0 } 0 .. 63];
-#my $data = BitsArray::from_hex(lc('4E6F772069732074'));
-#my $data = BitsArray::from_hex(lc('68652074696D6520'));
-#my $data = BitsArray::from_hex(lc('666F7220616C6C20'));
-
-
-#my $res = $encoder->encode_block($data);
-#$res = $encoder->decode_block($res);
-#print Dumper $res;
-
-#print BitsArray::to_hex($res);
-
+\end{document}
